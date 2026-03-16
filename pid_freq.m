@@ -29,19 +29,22 @@ req.Vs = 10.0; % Tensão de saturação
 
 % --- SELEÇÃO DO COMPENSADOR ---
 %[Gcz_lead, info_lead] = design_lead_lgr(Gz, T, tau_plant, req);
-[Gcz_lead, info_lead] = design_lead_lgr2(Gz, T, req);
+%[Gcz_lead, info_lead] = design_lead_lgr2(Gz, T, req);
+
+% Projeto 2: PID (Resposta em Frequência)
+[Gcz_pid, info_pid] = design_pid_freq(Gz, T, req);
 
 % Planta projetada no papel
 %b0=1.46;zero=0.103;polo=0.764;lead_num = [b0 -b0*zero];lead_den = [1 -polo];
 %[Gcz_lead, info_lead] = design_custom(lead_num, lead_den, T, 'Avanço de Fase Ajustado via LGR'); % Novo (Otimizado)
 
 % 4. Validação de Performance (Gráficos temporais e métricas)
-analyze_performance(Gz, Gcz_lead, T, req, info_lead.label);
+analyze_performance(Gz, Gcz_pid, T, req, info_pid.label);
 
 % 5. Validação de Estabilidade (Mapas de Polos e Zeros)
-plot_pzmaps(Gz, Gcz_lead, info_lead.label);
+plot_pzmaps(Gz, Gcz_pid, info_pid.label);
 
 % 6. Simulações Periódicas (Onda Quadrada e Triangular)
-simulate_square(Gz, Gcz_lead, T, info_lead.label);
+simulate_square(Gz, Gcz_pid, T, info_pid.label);
 
-simulate_triangle(Gz, Gcz_lead, T, info_lead.label);
+simulate_triangle(Gz, Gcz_pid, T, info_pid.label);
