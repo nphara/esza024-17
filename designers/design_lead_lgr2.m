@@ -1,11 +1,11 @@
-function [Gcz, info] = design_lead_lgr(Gz, T, req)
+function [Gcz, info] = design_lead_lgr2(Gz, T, req)
 
   % 1. Extração e Normalização dos Requisitos
-  Mp = req.Mp / 100;    % Converte de 4 para 0.04
-  tp = req.tp;          % 0.5 s
+  Mp = req.Mp/100;
+  tp = req.tp;
 
   % 2. Cálculo dos Parâmetros de Segunda Ordem (Domínio Contínuo)
-  % Conforme Ogata (Referência do roteiro da Semana 4)
+
   zeta = -log(Mp) / sqrt(pi^2 + (log(Mp))^2);
   wn = pi / (tp * sqrt(1 - zeta^2));
 

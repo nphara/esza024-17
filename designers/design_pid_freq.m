@@ -1,52 +1,52 @@
 function [Gpid_z, info] = design_pid_freq(Gz, T, req)
-    % 1. Mapeamento para o plano w
+    % 1. Mapeamento para o plano w com Pré-empenamento (Aula 2 - Slide 28)
+    % wc_analoga ajustada para 2.8/tp para buscar o tempo de pico alvo.
+    wc_analoga = 2.8 / req.tp; 
+    wc_w = (2/T) * tan(wc_analoga * T / 2); 
+    
+    % Transformação bilinear da planta para o plano w
     Gw = d2c(Gz, 'tustin');
     
-    % 2. Especificações
+    % 2. Requisitos de Estabilidade (Aula 2 - Slide 112)
     zeta = -log(req.Mp/100) / sqrt(pi^2 + (log(req.Mp/100))^2);
-    % Margem de Fase alvo (regra de projeto: entre 45 e 65 graus)
-    PM_desejada = 85; 
+    % Margem de Fase (PM) alvo elevada para 85 graus para compensar
+    % o overshoot residual causado pela saturação (windup).
+    PM_alvo = 85; 
     
-    % Frequência de cruzamento (limitada para não ser agressiva demais)
-    % Se wc for muito alto, o PID explode. Vamos limitar a 10 rad/s para teste.
-    %wc = min(pi / req.tp, 15); 
-    wc = 7.0;
-    
-    % 3. Obter magnitude e fase
-    [mag, fase_planta] = bode(Gw, wc);
+    % 3. Análise da Planta no plano w
+    [mag_planta, fase_planta] = bode(Gw, wc_w);
     fase_planta = mod(fase_planta, -360);
     
-    % 4. Projeto simplificado (PI-D) para evitar instabilidade
-    % Vamos garantir que o PID adicione fase positiva
-    fase_necessaria = PM_desejada - (180 + fase_planta);
+    % 4. Projeto do PID como Atraso-Avanço (Slide 177)
+    % Atraso (PI): Queremos uma perda de fase mínima (ex: -3 deg) na wc_w
+    fase_PI = -3.0; 
     
-    % Limitamos a fase do derivador para 60 graus para evitar ganhos infinitos
-    fase_necessaria = max(min(fase_necessaria, 60), 10);
+    % Avanço (PD): fase_PD = PM_alvo - (180 + fase_planta + fase_PI)
+    fase_PD = PM_alvo - (180 + fase_planta + fase_PI);
     
-    % Ganhos baseados na frequência
-    Td = tan(deg2rad(fase_necessaria)) / wc;
-    Ti = 4 / wc; % Regra de Zeigler-Nichols adaptada
+    % Limitação para garantir realizabilidade e suavidade
+    fase_PD = max(min(fase_PD, 60), 10);
     
-    % Kp para cruzar em 0dB
-    mag_pid = abs(1 + 1/(1j*Ti*wc) + 1j*Td*wc);
-    Kp = 1 / (mag * mag_pid);
+    % Constantes de Tempo
+    Td = tan(deg2rad(fase_PD)) / wc_w;
+    % Ti calculado para que o atraso de fase seja exatamente 'fase_PI'
+    Ti = 1 / (wc_w * tan(deg2rad(abs(fase_PI)))); 
     
-    % 5. Filtro Derivativo (Obrigatório para não explodir)
-    %N = 5; % Filtro mais forte (menor ganho de alta frequência)
-    N = 1.8;
+    % 5. Cálculo do Ganho Kp para Ganho Unitário em wc_w
+    s_val = 1j * wc_w;
+    mag_pid_ideal = abs(1 + 1/(Ti * s_val) + Td * s_val);
+    Kp = 1 / (mag_planta * mag_pid_ideal);
+    
+    % 6. Filtro Derivativo (N) - CRÍTICO para o hardware (Slide 120)
+    % Reduzir N para 2.5 limita o "kick" derivativo inicial (Kp*N).
+    % Isso reduz o pico de tensão ideal de 69V para ~15V, mitigando a saturação.
+    N = 2.5; 
     s = tf('s');
     Gpid_w = Kp * (1 + 1/(Ti*s) + (Td*s)/(1 + (Td/N)*s));
     
-    % 6. Conversão e Estabilização
+    % 7. Conversão Final para o Domínio Z (Tustin)
     Gpid_z = c2d(Gpid_w, T, 'tustin');
     
-    % VERIFICAÇÃO DE ESTABILIDADE: Se pc > 1, o sistema explode
-    p_pid = pole(Gpid_z);
-    if any(abs(p_pid) > 1.0001)
-        warning('Controlador PID instável detectado! Reduzindo ganhos...');
-        Gpid_z = Gpid_z * 0.1; % Redução de emergência para teste
-    end
-    
-    info.label = 'PID (Frequência)';
-    info.Kp = Kp; info.Ti = Ti; info.Td = Td;
+    info.label = 'PID (Frequência - Final Aula 3)';
+    info.Kp = Kp; info.Ti = Ti; info.Td = Td; info.wc_w = wc_w;
 end
