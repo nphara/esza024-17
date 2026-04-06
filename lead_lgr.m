@@ -23,9 +23,15 @@ T = sys(plant).T
 K_plant = sys(plant).K_plant
 tau_plant = sys(plant).tau_plant
 
-s = tf('s');
-Gs = K_plant / (s * (tau_plant * s + 1));
-Gz = c2d(Gs, T, 'zoh');
+% Transformacoes da planta para projeto e uso embarcado
+plant_model = build_plant_for_embedded(K_plant, tau_plant, T);
+Gs = plant_model.Gs;
+Gz = plant_model.Gz;
+Gw = plant_model.Gw;
+
+fprintf('Planta (embedded) ordem=%d | a=%s | b=%s\n', ...
+    plant_model.embedded.order, mat2str(plant_model.embedded.a, 6), mat2str(plant_model.embedded.b, 6));
+fprintf('Mapa bilinear: %s\n', plant_model.w_info.mapping);
 
 
 % REQUISITOS %
@@ -40,6 +46,10 @@ req.tp = 0.5;   % Tempo de pico 0.5(s)
 req.ts = 2.0;  % Tempo de assentamento (s) - para o Atraso
 req.OutSat = 10.0; % Tensão de saturação
 
+% Plant parameters (needed for reporting)
+req.K_plant = K_plant;
+req.tau_plant = tau_plant;
+
 % ANALISE %
 %=========%
 
@@ -53,10 +63,36 @@ req.OutSat = 10.0; % Tensão de saturação
 %========================%
 
 
-% Geração Automatica %
-%--------------------%
+% Geração Automatica (single analytic mode) %
+%-------------------------------------------%
 
-[Gcz_lead, info_lead] = design_lead_lgr2(Gz, T, req);
+req_design = req;
+req_design.mode = "analytic";
+
+fprintf('\n╔════════════════════════════════════════╗\n');
+fprintf('║ EXECUTION MODE: ANALYTIC LGR          ║\n');
+fprintf('║ Target: Mp ≤ %.0f%%, tp ≤ %.1fs         ║\n', req_design.Mp, req_design.tp);
+fprintf('╚════════════════════════════════════════╝\n');
+
+[Gcz_lead, info_lead] = design_lead_lgr2(Gz, T, req_design);
+
+fprintf('\n--- ANALYTIC MODE RESULT ---\n');
+fprintf('Compensador projetado: zc=%.4f, pc=%.4f\n', info_lead.zc, info_lead.pc);
+fprintf('Kc=%.4f | structure=%s | FOUND: %d\n', info_lead.Kc, info_lead.structure, info_lead.found);
+
+if info_lead.found && isstruct(info_lead.metrics)
+    fprintf('  Mp=%.2f%% | tp=%.3fs\n', info_lead.metrics.Mp, info_lead.metrics.tp);
+    fprintf('  u_max_step=%.2fV | u_max_sq=%.2fV | u_max_tri=%.2fV\n', ...
+        info_lead.metrics.u_max_step, info_lead.metrics.u_max_sq, info_lead.metrics.u_max_tri);
+    fprintf('  t_sat_sq=%.3fs | t_sat_tri=%.3fs\n', ...
+        info_lead.metrics.t_sat_sq, info_lead.metrics.t_sat_tri);
+    status_design = "FEASIBLE";
+else
+    fprintf('  Status: INFEASIBLE UNDER HARD CHECKS\n');
+    status_design = "INFEASIBLE";
+end
+
+fprintf('\n➤ Using ANALYTIC configuration (%s)\n', status_design);
 
 
 
@@ -70,13 +106,34 @@ req.OutSat = 10.0; % Tensão de saturação
 %   RESULTADOS   %
 %================%
 
-% 4. Validação de Performance (Gráficos temporais e métricas)
-analyze_performance(Gz, Gcz_lead, T, req, info_lead.label);
+% === REPORT GENERATION ===
+fprintf('\n╔════════════════════════════════════════╗\n');
+fprintf('║ GENERATING COMPREHENSIVE REPORT       ║\n');
+fprintf('╚════════════════════════════════════════╝\n');
 
-% 5. Validação de Estabilidade (Mapas de Polos e Zeros)
-plot_pzmaps(Gz, Gcz_lead, info_lead.label);
+% Setup report folder structure
+timestamp = strftime('%Y%m%d_%Hh%M', localtime(time()));
+controller_type = 'lead';
+design_method = 'lgr';
+run_label = sprintf('%s_%s_%s', timestamp, controller_type, design_method);
 
-% 6. Simulações Periódicas (Onda Quadrada e Triangular)
-simulate_square(Gz, Gcz_lead, T, info_lead.label, req.OutSat);
+% Relative path (from srv02 directory)
+report_base_dir = fullfile(pwd, 'report');
+run_folder = fullfile(report_base_dir, run_label);
+plots_folder = fullfile(run_folder, 'plots');
 
-simulate_triangle(Gz, Gcz_lead, T, info_lead.label, req.OutSat);
+% Create folders
+[~, ~, ~] = mkdir(run_folder);
+[~, ~, ~] = mkdir(plots_folder);
+
+fprintf('Report folder: %s\n', run_folder);
+fprintf('Plots folder:  %s\n', plots_folder);
+
+% Generate comprehensive report with plots
+report_path = generate_design_report(Gz, T, Gs, ...
+    req_design, ...
+    Gcz_lead, info_lead, info_lead.metrics, ...
+    run_label, plots_folder);
+
+fprintf('\n✅ Full report and plots generated successfully!\n');
+fprintf('   Report: %s\n', report_path);

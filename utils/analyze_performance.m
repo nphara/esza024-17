@@ -1,4 +1,4 @@
-function analyze_performance(Gz, Gcz, T, req, label)
+function analyze_performance(Gz, Gcz, T, req, label, save_path)
     % Malha fechada
     FTMF = feedback(Gcz * Gz, 1);
 
@@ -107,4 +107,10 @@ function analyze_performance(Gz, Gcz, T, req, label)
 
     % Ajusta os limites para facilitar a visualização
     ylim([-1.2 * req.OutSat 1.2 * req.OutSat]);
+    
+    % Save figure if path provided
+    if nargin > 5 && ~isempty(save_path)
+        saveas(gcf, save_path, 'png');
+        close(gcf);
+    end
 end

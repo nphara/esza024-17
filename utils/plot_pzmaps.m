@@ -1,6 +1,10 @@
-function plot_pzmaps(Gz, Gcz, label)
+function plot_pzmaps(Gz, Gcz, label, save_path)
     % Sistema em Malha Aberta Compensada
     Gma_comp = Gcz * Gz;
+    
+    if nargin < 4
+        save_path = [];
+    end
 
     figure('Name', ['Mapas de Polos e Zeros - ', label]);
 
@@ -49,4 +53,10 @@ function plot_pzmaps(Gz, Gcz, label)
     set(findobj(h_obj2, 'type', 'line'), 'MarkerSize', 1);
 
     xlabel('Real'); ylabel('Imaginário');
+    
+    % Save figure if path provided
+    if ~isempty(save_path)
+        saveas(gcf, save_path, 'png');
+        close(gcf);
+    end
 end
